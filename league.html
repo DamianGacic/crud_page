@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>League Stats Editor (Upsert)</title>
+    <!-- Load Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f9fb;
+        }
+        /* Custom scrollbar for stats container */
+        .stats-container {
+            max-height: 75vh; /* Max height for scrolling */
+            overflow-y: auto;
+        }
+        /* Basic styling for number inputs to keep them clean */
+        input[type="number"] {
+            -moz-appearance: textfield; /* Firefox */
+        }
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none; /* Chrome, Safari, Edge */
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="app" class="min-h-screen flex items-center justify-center p-4 sm:p-8">
+        <div class="w-full max-w-xl bg-white shadow-2xl rounded-2xl p-6 sm:p-8 space-y-6 border-t-4 border-violet-600">
+
+            <h1 class="text-3xl font-bold text-gray-800 text-center">Champion Stats Editor</h1>
+            <p class="text-center text-sm text-gray-500">
+                Uses **UPSERT** logic to either add a new champion or update an existing one.
+            </p>
+
+            <!-- Champion Name Input -->
+            <div class="space-y-4">
+                <label for="championNameInput" class="block text-sm font-medium text-gray-700 mb-1">Champion Name</label>
+                <input
+                    type="text"
+                    id="championNameInput"
+                    placeholder="e.g., Aatrox"
+                    class="w-full p-3 border border-gray-300 rounded-lg text-lg font-semibold focus:ring-violet-500 focus:border-violet-500 transition duration-150 shadow-sm"
+                />
+            </div>
+
+            <!-- Stats Container (Scrollable) -->
+            <div class="stats-container p-3 border border-gray-200 rounded-xl bg-gray-50 shadow-inner">
+                <h2 class="text-xl font-semibold text-gray-700 mb-4 border-b pb-2">28 Core Metrics (0-10)</h2>
+                
+                <div id="metricsGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3">
+                    <!-- Metrics will be dynamically inserted here by JavaScript -->
+                </div>
+            </div>
+
+            <!-- Action Button -->
+            <div class="space-y-4">
+                <button
+                    id="saveButton"
+                    class="w-full py-3 bg-violet-600 text-white font-semibold rounded-lg hover:bg-violet-700 transition duration-200 shadow-md hover:shadow-xl disabled:bg-violet-400"
+                    disabled
+                >
+                    Save or Update Champion Stats
+                </button>
+                <div id="message" class="text-center text-sm min-h-6 font-medium"></div>
+            </div>
+
+            <div class="pt-4 border-t border-gray-100">
+                <p class="text-xs text-gray-400">
+                    **Crucial Setup:** For upsert to work, the `LeagueStats` table **must** have a **unique constraint/primary key** on the `Name` column.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Supabase Client Library and Script -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script type="module">
+        // ====================================================================
+        // === Your Supabase Credentials (Already inserted) ===
+        // ====================================================================
+        const SUPABASE_URL = 'https://ckmqqnmkwumeatvpnlyj.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNrbXFxbm1rd3VtZWF0dnBubHlqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM0NjI5NDYsImV4cCI6MjA3OTAzODk0Nn0.0fw1th-i_tVbd7x9QMAZX4FQKjVrhTQ1RQFbiFerOq4';
+        const TABLE_NAME = 'LeagueStats';
+
+        // All 28 metric fields as defined by the user
+        const METRIC_FIELDS = [
+            'Engager', 'Disengager', 'Fighter', 'Ranger', 'Safe', 'Slow', 
+            'SafeCC', 'CondCC', 'Hardengage', 'Knockups', 'Jukes', 'Flashes', 
+            'Targetjumps', 'TerrainCrosses', 'Dodgeables', 'Blockables', 
+            'Tankiness', 'Dps', 'Burst', 'Ad', 'Md', 'Td', 'EOS', 'Vision', 
+            'Waveclear', 'Heals', 'Shields', 'Splitpush'
+        ];
+
+        // Global variables for Supabase and elements
+        let supabase;
+        const messageDiv = document.getElementById('message');
+        const saveButton = document.getElementById('saveButton');
+        const championNameInput = document.getElementById('championNameInput');
+        const metricsGrid = document.getElementById('metricsGrid');
+        const inputElements = {}; // To store references to all 28 number inputs
+
+        /**
+         * Dynamically creates the 28 input fields and groups them.
+         */
+        function setupMetricsForm() {
+            let html = '';
+            
+            // Group the metrics for better visual organization
+            const groups = {
+                'Combat & Damage': METRIC_FIELDS.slice(2, 5).concat(METRIC_FIELDS.slice(17, 23)), // Fighter, Ranger, Safe, Dps, Burst, Ad, Md, Td, EOS
+                'Crowd Control & Mobility': METRIC_FIELDS.slice(0, 2).concat(METRIC_FIELDS.slice(5, 15)), // Engager, Disengager, Slow, SafeCC...TerrainCrosses
+                'Defense & Utility': METRIC_FIELDS.slice(15, 17).concat(METRIC_FIELDS.slice(23)), // Dodgeables, Blockables, Tankiness, Vision, Waveclear, Heals, Shields, Splitpush
+            };
+            
+            for (const [groupName, fields] of Object.entries(groups)) {
+                html += `<div class="col-span-2 sm:col-span-3 mt-4"><h3 class="text-sm font-bold text-violet-700 bg-violet-100 p-2 rounded-lg">${groupName}</h3></div>`;
+                fields.forEach(field => {
+                    const inputId = field.toLowerCase() + 'Input';
+                    html += `
+                        <div class="col-span-1">
+                            <label for="${inputId}" class="block text-xs font-medium text-gray-600 mb-1">${field}</label>
+                            <input
+                                type="number"
+                                id="${inputId}"
+                                value="0"
+                                min="0"
+                                max="10"
+                                class="w-full p-2 border border-gray-300 rounded-md focus:ring-violet-500 focus:border-violet-500 text-sm text-center"
+                            />
+                        </div>
+                    `;
+                });
+            }
+            metricsGrid.innerHTML = html;
+
+            // Get references to all dynamically created inputs
+            METRIC_FIELDS.forEach(field => {
+                const inputId = field.toLowerCase() + 'Input';
+                const input = document.getElementById(inputId);
+                inputElements[field] = input;
+                input.addEventListener('input', checkInputs);
+            });
+        }
+
+        /**
+         * Checks if the Champion Name is filled and enables the save button.
+         */
+        function checkInputs() {
+            const isNameValid = championNameInput.value.trim().length > 0;
+            saveButton.disabled = !isNameValid || !supabase;
+        }
+        
+        // --- Initialization ---
+        setupMetricsForm();
+
+        try {
+            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            console.log("Supabase Client initialized successfully!");
+            messageDiv.textContent = "Client ready. Enter Champion details and stats.";
+            messageDiv.classList.add('text-gray-500');
+            checkInputs(); 
+        } catch (error) {
+            messageDiv.innerHTML = `<span class="text-red-600">Init Error: Failed to create client. ${error.message}</span>`;
+            saveButton.disabled = true;
+            console.error("Supabase Initialization Failed. The error was:", error);
+        }
+
+        // Add event listeners
+        championNameInput.addEventListener('input', checkInputs);
+
+
+        // --- Save/Upsert Logic ---
+
+        async function saveToSupabase() {
+            if (!supabase || saveButton.disabled) return;
+
+            const championName = championNameInput.value.trim();
+
+            if (!championName) {
+                messageDiv.textContent = "Please enter a Champion Name.";
+                return;
+            }
+
+            // 1. Build the data payload
+            const payload = {
+                Name: championName, // Name is the unique identifier for upsert
+            };
+
+            // Read all 28 metrics and parse them as integers
+            for (const field of METRIC_FIELDS) {
+                const input = inputElements[field];
+                // Ensure value is between 0 and 10 and parsed as an integer
+                const value = Math.max(0, Math.min(10, parseInt(input.value || '0', 10)));
+                payload[field] = value;
+            }
+            
+            saveButton.disabled = true;
+            messageDiv.textContent = `Processing ${championName}...`;
+            messageDiv.classList.remove('text-red-600', 'text-green-600', 'text-gray-500');
+            messageDiv.classList.add('text-violet-600');
+
+            try {
+                // Use upsert to handle both inserts (new champion) and updates (existing champion)
+                const { data, error } = await supabase
+                    .from(TABLE_NAME)
+                    .upsert(payload, { 
+                        onConflict: 'Name' // CRUCIAL: Must match the unique key column name in Supabase
+                    })
+                    .select();
+
+                if (error) {
+                    if (error.code === '42501' || error.message.includes('permission denied')) {
+                        throw new Error(`Permission Denied (RLS issue): Did you enable RLS and create an INSERT/UPDATE policy for 'anon'?`);
+                    }
+                    throw error;
+                }
+
+                console.log("Upsert successful:", data);
+                const action = (data && data.length > 0 && data[0].created_at) ? 'Updated' : 'Inserted';
+                
+                messageDiv.textContent = `${action} stats for ${championName} successfully!`;
+                messageDiv.classList.remove('text-violet-600');
+                messageDiv.classList.add('text-green-600');
+                
+            } catch (error) {
+                console.error("Supabase UPSERT Error:", error);
+                messageDiv.textContent = `Error saving: ${error.message}`;
+                messageDiv.classList.remove('text-violet-600');
+                messageDiv.classList.add('text-red-600');
+            } finally {
+                saveButton.disabled = false;
+            }
+        }
+
+        saveButton.addEventListener('click', saveToSupabase);
+    </script>
+</body>
+</html>
