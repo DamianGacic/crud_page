@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supabase Data Saver</title>
+    <!-- Load Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f9fb;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="app" class="min-h-screen flex items-center justify-center p-4 sm:p-8">
+        <div class="w-full max-w-lg bg-white shadow-2xl rounded-2xl p-6 sm:p-8 space-y-6 border-t-4 border-emerald-500">
+
+            <h1 class="text-3xl font-bold text-gray-800 text-center">Supabase Quick Insert</h1>
+            <p class="text-center text-sm text-gray-500">
+                Saves a text entry to your specified Supabase table.
+            </p>
+
+            <!-- Table Input -->
+            <div>
+                <label for="tableName" class="block text-sm font-medium text-gray-700 mb-1">Target Table Name</label>
+                <input
+                    type="text"
+                    id="tableName"
+                    value="textTable2"
+                    class="w-full p-3 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 transition duration-150 shadow-sm"
+                    placeholder="e.g., my_notes"
+                />
+            </div>
+
+            <!-- Text Input Area -->
+            <div class="space-y-4">
+                <label for="textInput" class="block text-sm font-medium text-gray-700 mb-1">Text to Save</label>
+                <textarea
+                    id="textInput"
+                    rows="4"
+                    placeholder="Enter your text here..."
+                    class="w-full p-3 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 transition duration-150 shadow-sm resize-none"
+                    maxlength="500"
+                ></textarea>
+                <button
+                    id="saveButton"
+                    class="w-full py-3 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700 transition duration-200 shadow-md hover:shadow-lg disabled:bg-emerald-400"
+                    disabled
+                >
+                    Save to Supabase
+                </button>
+                <div id="message" class="text-center text-sm min-h-6 font-medium"></div>
+            </div>
+
+            <div class="pt-4 border-t border-gray-100">
+                <p class="text-xs text-gray-400">
+                    Remember: For this to work, your table must have a column that accepts text (e.g., `content` or `note`).
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Supabase Client Library and Script -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script type="module">
+        // ====================================================================
+        // === Your Supabase Credentials (Already inserted) ===
+        // ====================================================================
+        const SUPABASE_URL = 'https://ckmqqnmkwumeatvpnlyj.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNrbXFxbm1rd3VtZWF0dnBubHlqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM0NjI5NDYsImV4cCI6MjA3OTAzODk0Nn0.0fw1th-i_tVbd7x9QMAZX4FQKjVrhTQ1RQFbiFerOq4';
+
+        // Initialize Supabase Client
+        let supabase;
+        const messageDiv = document.getElementById('message');
+        const saveButton = document.getElementById('saveButton');
+        const textInput = document.getElementById('textInput');
+        const tableNameInput = document.getElementById('tableName');
+
+        try {
+            // Initialize the client directly.
+            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            console.log("Supabase Client initialized successfully!");
+            
+            messageDiv.textContent = "Client ready. Enter text and click save.";
+            messageDiv.classList.add('text-gray-500');
+            // Enable button if text input is populated (it's initially disabled by HTML)
+            if (textInput.value.trim() && supabase) {
+                saveButton.disabled = false;
+            }
+
+        } catch (error) {
+            // Catch if the library failed to load or other initial errors
+            messageDiv.innerHTML = `<span class="text-red-600">Init Error: Failed to create client. ${error.message}</span>`;
+            saveButton.disabled = true;
+            console.error("Supabase Initialization Failed. The error was:", error);
+        }
+
+        // Enable button only when there is text input AND the client is initialized
+        textInput.addEventListener('input', () => {
+            saveButton.disabled = !textInput.value.trim() || !supabase;
+        });
+
+        // Function to save data to Supabase
+        async function saveToSupabase() {
+            // 🛑 GUARD CLAUSE: Check if the client is initialized before proceeding
+            if (!supabase) {
+                messageDiv.textContent = "FATAL ERROR: Supabase client is not initialized. Please check console for Init Error.";
+                messageDiv.classList.remove('text-sky-600', 'text-green-600');
+                messageDiv.classList.add('text-red-600');
+                saveButton.disabled = true;
+                return;
+            }
+
+            const content = textInput.value.trim();
+            const tableName = tableNameInput.value.trim();
+
+            if (!content) {
+                messageDiv.textContent = "Please enter some content.";
+                return;
+            }
+            if (!tableName) {
+                messageDiv.textContent = "Please enter the target table name.";
+                return;
+            }
+
+            saveButton.disabled = true;
+            messageDiv.textContent = 'Saving data...';
+            messageDiv.classList.remove('text-red-600', 'text-green-600', 'text-gray-500');
+            messageDiv.classList.add('text-sky-600');
+
+            try {
+                // Removed `saved_at: new Date()` from the insert object.
+                const { data, error } = await supabase
+                    .from(tableName)
+                    .insert([
+                        // Now only sends the content column
+                        { content: content }
+                    ])
+                    .select(); // Use .select() to return the inserted data
+
+                if (error) {
+                    // Check for RLS error specifically
+                    if (error.code === '42501' || error.message.includes('permission denied')) {
+                        throw new Error(`Permission Denied (RLS issue): ${error.message}. You likely need to enable RLS and/or create an INSERT policy for the 'anon' role on your table.`);
+                    }
+                    throw error;
+                }
+
+                console.log("Data saved successfully:", data);
+                messageDiv.textContent = `Success! Saved ${data.length} row(s) to '${tableName}'.`;
+                messageDiv.classList.remove('text-sky-600');
+                messageDiv.classList.add('text-green-600');
+                textInput.value = ''; // Clear input on success
+
+            } catch (error) {
+                console.error("Supabase Save Error:", error);
+                messageDiv.textContent = `Error saving: ${error.message}`;
+                messageDiv.classList.remove('text-sky-600');
+                messageDiv.classList.add('text-red-600');
+            } finally {
+                saveButton.disabled = false;
+            }
+        }
+
+        saveButton.addEventListener('click', saveToSupabase);
+    </script>
+</body>
+</html>
