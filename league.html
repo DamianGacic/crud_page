@@ -44,70 +44,13 @@
                 />
             </div>
 
-            <!-- ============================= -->
-            <!-- GROUPED METRICS LAYOUT HERE -->
-            <!-- ============================= -->
+            <!-- ===================================================== -->
+            <!-- ALL METRICS IN ONE SINGLE CLEAN GRID (NO GROUP TITLES) -->
+            <!-- ===================================================== -->
             <div class="stats-container p-3 border border-gray-200 rounded-xl bg-gray-50 shadow-inner">
                 <h2 class="text-xl font-semibold text-gray-700 mb-4 border-b pb-2">28 Core Metrics (0-10)</h2>
 
-                <div id="metricsGrid" class="space-y-6">
-
-                    <!-- 1. ENGAGEMENT & CONTROL -->
-                    <div>
-                        <h3 class="text-sm font-semibold text-gray-700 mb-2">Engagement & Control</h3>
-                        <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                            <!-- Engager -->
-                            <!-- Disengager -->
-                            <!-- Fighter -->
-                            <!-- Ranger -->
-                            <!-- SafeSlow -->
-                            <!-- SafeCC -->
-                            <!-- CondCC -->
-                            <!-- Hardengage -->
-                            <!-- Knockups -->
-                        </div>
-                    </div>
-
-                    <!-- 2. MOBILITY & OUTPLAY -->
-                    <div>
-                        <h3 class="text-sm font-semibold text-gray-700 mb-2">Mobility & Outplay</h3>
-                        <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                            <!-- Jukes -->
-                            <!-- Flashes -->
-                            <!-- Targetjumps -->
-                            <!-- TerrainCrosses -->
-                            <!-- Dodgeables -->
-                            <!-- Blockables -->
-                        </div>
-                    </div>
-
-                    <!-- 3. DEFENSE & DAMAGE -->
-                    <div>
-                        <h3 class="text-sm font-semibold text-gray-700 mb-2">Defense & Damage</h3>
-                        <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                            <!-- Tankiness -->
-                            <!-- Dps -->
-                            <!-- Burst -->
-                            <!-- Ad -->
-                            <!-- Md -->
-                            <!-- Td -->
-                            <!-- EOS -->
-                        </div>
-                    </div>
-
-                    <!-- 4. UTILITY & MAP INTERACTION -->
-                    <div>
-                        <h3 class="text-sm font-semibold text-gray-700 mb-2">Utility & Map Interaction</h3>
-                        <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                            <!-- Vision -->
-                            <!-- Waveclear -->
-                            <!-- Heals -->
-                            <!-- Shields -->
-                            <!-- Splitpush -->
-                        </div>
-                    </div>
-
-                </div>
+                <div id="metricsGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3"></div>
             </div>
 
             <div class="space-y-4">
@@ -151,30 +94,26 @@
         const inputElements = {};
 
         function setupMetricsForm() {
-            const allContainers = metricsGrid.querySelectorAll(".grid");
+            let html = "";
 
-            let index = 0;
             METRIC_FIELDS.forEach(field => {
-                const inputId = field.toLowerCase() + 'Input';
-                const container = allContainers[Math.min(index, allContainers.length - 1)];
-
-                const wrapper = document.createElement("div");
-                wrapper.className = "col-span-1";
-                wrapper.innerHTML = `
-                    <label for="${inputId}" class="block text-xs font-medium text-gray-600 mb-1">${field}</label>
-                    <input
-                        type="number"
-                        id="${inputId}"
-                        placeholder="N/A"
-                        min="0"
-                        max="10"
-                        class="w-full p-2 border border-gray-300 rounded-md focus:ring-violet-500 focus:border-violet-500 text-sm text-center"
-                    />
+                const inputId = field.toLowerCase() + "Input";
+                html += `
+                    <div class="col-span-1">
+                        <label for="${inputId}" class="block text-xs font-medium text-gray-600 mb-1">${field}</label>
+                        <input
+                            type="number"
+                            id="${inputId}"
+                            placeholder="N/A"
+                            min="0"
+                            max="10"
+                            class="w-full p-2 border border-gray-300 rounded-md focus:ring-violet-500 focus:border-violet-500 text-sm text-center"
+                        />
+                    </div>
                 `;
-                container.appendChild(wrapper);
-
-                index++;
             });
+
+            metricsGrid.innerHTML = html;
 
             METRIC_FIELDS.forEach(field => {
                 const id = field.toLowerCase() + "Input";
